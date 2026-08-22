@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UNO 抽籤器</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    background: linear-gradient(135deg, #f7f7f7, #e9eef5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #222;
+  }
+  .app {
+    width: min(900px, 94vw);
+    background: white;
+    border-radius: 24px;
+    padding: 32px;
+    box-shadow: 0 15px 45px rgba(0,0,0,.15);
+    text-align: center;
+  }
+  h1 { margin: 0 0 8px; font-size: 2.2rem; }
+  .subtitle { color: #666; margin-bottom: 24px; }
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .stat {
+    background: #f4f4f4;
+    border-radius: 14px;
+    padding: 10px 18px;
+    min-width: 130px;
+  }
+  .stat strong { display:block; font-size: 1.35rem; }
+  .card-area {
+    min-height: 330px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 10px 0 22px;
+  }
+  .uno-card {
+    width: 220px;
+    height: 300px;
+    border-radius: 28px;
+    border: 8px solid white;
+    outline: 4px solid rgba(0,0,0,.15);
+    box-shadow: 0 14px 30px rgba(0,0,0,.25);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+    transform: rotate(-2deg);
+  }
+  .uno-card::before {
+    content: "";
+    position: absolute;
+    width: 175px;
+    height: 255px;
+    background: rgba(255,255,255,.16);
+    border-radius: 50%;
+    transform: rotate(-18deg);
+  }
+  .card-text {
+    position: relative;
+    z-index: 1;
+    font-weight: 900;
+    font-size: 5.2rem;
+    text-shadow: 3px 4px 0 rgba(0,0,0,.22);
+  }
+  .card-text.long { font-size: 2.8rem; line-height: 1.15; }
+  .red { background:#e52521; }
+  .yellow { background:#f7c900; color:#222; }
+  .green { background:#169b45; }
+  .blue { background:#1769d1; }
+  .wild { background: linear-gradient(135deg,#e52521 0 25%,#f7c900 25% 50%,#169b45 50% 75%,#1769d1 75%); }
+  .wild .card-text { color:white; }
+  .placeholder {
+    width:220px; height:300px;
+    border-radius:28px;
+    border:3px dashed #bbb;
+    display:flex; align-items:center; justify-content:center;
+    color:#999; font-size:1.2rem;
+  }
+  button {
+    border:0;
+    border-radius:14px;
+    padding:14px 30px;
+    font-size:1.1rem;
+    font-weight:700;
+    cursor:pointer;
+    margin:5px;
+    transition:.15s;
+  }
+  button:hover { transform:translateY(-2px); }
+  .draw { background:#222; color:white; }
+  .reset { background:#e7e7e7; color:#222; }
+  .message { min-height:28px; margin-top:14px; color:#666; }
+  .history {
+    margin-top:26px;
+    text-align:left;
+    border-top:1px solid #eee;
+    padding-top:20px;
+  }
+  .history h2 { font-size:1.1rem; margin:0 0 10px; }
+  #historyList {
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+  .history-item {
+    padding:7px 11px;
+    border-radius:9px;
+    color:white;
+    font-weight:700;
+    font-size:.9rem;
+  }
+  .history-item.yellow { color:#222; }
+  @media(max-width:600px) {
+    .app { padding:22px 15px; }
+    .uno-card { width:180px; height:250px; }
+    .card-area { min-height:280px; }
+    .card-text { font-size:4rem; }
+    .card-text.long { font-size:2.2rem; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🃏 UNO 抽籤器</h1>
+  <div class="subtitle">隨機抽取一張 UNO 卡牌｜抽出後暫時移出牌堆</div>
+
+  <div class="stats">
+    <div class="stat">剩餘牌數<strong id="remaining">108</strong></div>
+    <div class="stat">已抽牌數<strong id="drawn">0</strong></div>
+  </div>
+
+  <div class="card-area" id="cardArea">
+    <div class="placeholder">按下「開始抽籤」</div>
+  </div>
+
+  <div>
+    <button class="draw" id="drawBtn">開始抽籤</button>
+    <button class="reset" id="resetBtn">重置／重新洗牌</button>
+  </div>
+  <div class="message" id="message">牌堆共有 108 張牌。</div>
+
+  <div class="history">
+    <h2>抽牌紀錄</h2>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<script>
+const colors = [
+  {name:"紅", className:"red"},
+  {name:"黃", className:"yellow"},
+  {name:"綠", className:"green"},
+  {name:"藍", className:"blue"}
+];
+
+let deck = [];
+let drawnCount = 0;
+
+function createDeck() {
+  const cards = [];
+
+  // 每種顏色：0 一張、1-9 各兩張
+  colors.forEach(color => {
+    cards.push({color: color.name, className: color.className, name:"0", display:"0"});
+    for (let n = 1; n <= 9; n++) {
+      cards.push({color: color.name, className: color.className, name:String(n), display:String(n)});
+      cards.push({color: color.name, className: color.className, name:String(n), display:String(n)});
+    }
+
+    // 每種顏色 Skip / Reverse / +2 各兩張
+    ["跳過","反轉","+2"].forEach(action => {
+      for (let i = 0; i < 2; i++) {
+        cards.push({
+          color: color.name,
+          className: color.className,
+          name: action,
+          display: action
+        });
+      }
+    });
+  });
+
+  // 4 張 Wild + 4 張 Wild Draw Four
+  for (let i = 0; i < 4; i++) {
+    cards.push({color:"特殊", className:"wild", name:"變色", display:"WILD"});
+    cards.push({color:"特殊", className:"wild", name:"變色 +4", display:"WILD +4"});
+  }
+
+  return cards;
+}
+
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function reset() {
+  deck = shuffle(createDeck());
+  drawnCount = 0;
+  document.getElementById("remaining").textContent = deck.length;
+  document.getElementById("drawn").textContent = 0;
+  document.getElementById("cardArea").innerHTML =
+    '<div class="placeholder">按下「開始抽籤」</div>';
+  document.getElementById("message").textContent = "牌堆已重新洗牌，共 108 張牌。";
+  document.getElementById("historyList").innerHTML = "";
+}
+
+function drawCard() {
+  if (deck.length === 0) {
+    document.getElementById("message").textContent =
+      "🎉 牌堆已抽完！請按「重置／重新洗牌」開始新的一局。";
+    return;
+  }
+
+  const card = deck.pop();
+  drawnCount++;
+
+  document.getElementById("remaining").textContent = deck.length;
+  document.getElementById("drawn").textContent = drawnCount;
+
+  const textClass = card.display.length > 3 ? "card-text long" : "card-text";
+
+  document.getElementById("cardArea").innerHTML = `
+    <div class="uno-card ${card.className}">
+      <div class="${textClass}">${card.display}</div>
+    </div>
+  `;
+
+  document.getElementById("message").textContent =
+    `抽到：${card.color} ${card.name}｜剩餘 ${deck.length} 張`;
+
+  const item = document.createElement("div");
+  item.className = `history-item ${card.className}`;
+  item.textContent = `${card.color} ${card.name}`;
+  document.getElementById("historyList").prepend(item);
+}
+
+document.getElementById("drawBtn").addEventListener("click", drawCard);
+document.getElementById("resetBtn").addEventListener("click", reset);
+
+reset();
+</script>
+</body>
+</html>
